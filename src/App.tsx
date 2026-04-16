@@ -25,6 +25,8 @@ import { Login } from '@/sections/Login';
 import { Dashboard } from '@/sections/Dashboard';
 import { ParentManagement, ParentDetail } from '@/sections/ParentManagement';
 import { ParentForm } from '@/sections/ParentForm';
+import { ChildForm } from '@/sections/ChildForm';
+import { ChildDetail } from '@/sections/ChildDetail';
 import { GrantGadgetManager } from '@/sections/GrantGadgetManager';
 import { ReportsExports } from '@/sections/ReportsExports';
 import { useAuth } from '@/hooks/useAuth';
@@ -38,6 +40,8 @@ type Page =
   | 'parent-new' 
   | 'parent-edit' 
   | 'parent-detail'
+  | 'child-new'
+  | 'child-detail'
   | 'grants'
   | 'reports'
   | 'settings';
@@ -117,6 +121,39 @@ function App() {
             pNo={pageParams?.pNo} 
             onNavigate={navigateTo} 
             onBack={() => navigateTo('parents')} 
+          />
+        );
+      case 'child-new':
+        return (
+          <ChildForm
+            pNo={pageParams?.pNo}
+            onSave={(params) => {
+              if (params?.pNo) {
+                navigateTo('parent-detail', { pNo: params.pNo });
+              } else {
+                navigateTo('parents');
+              }
+            }}
+            onCancel={() => {
+              if (pageParams?.pNo) {
+                navigateTo('parent-detail', { pNo: pageParams.pNo });
+              } else {
+                navigateTo('parents');
+              }
+            }}
+          />
+        );
+      case 'child-detail':
+        return (
+          <ChildDetail
+            childId={Number(pageParams?.childId)}
+            onBack={() => {
+              if (pageParams?.pNo) {
+                navigateTo('parent-detail', { pNo: pageParams.pNo });
+              } else {
+                navigateTo('parents');
+              }
+            }}
           />
         );
       case 'grants':

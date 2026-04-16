@@ -106,6 +106,18 @@ export function ParentForm({ pNo, onSave, onCancel }: ParentFormProps) {
     if (bankData.IBAN) {
       const ibanError = getIBANError(bankData.IBAN);
       if (ibanError) newErrors.push(ibanError);
+
+      const normalizedIban = bankData.IBAN.trim().toUpperCase();
+      const duplicateBankRecord = banking.find(b => {
+        const existingIban = (b.IBAN || '').trim().toUpperCase();
+        if (existingIban !== normalizedIban) return false;
+        if (isEditing && existingBank && b.Account_ID === existingBank.Account_ID) return false;
+        return true;
+      });
+
+      if (duplicateBankRecord) {
+        newErrors.push('IBAN already exists for another beneficiary');
+      }
     }
 
     setErrors(newErrors);

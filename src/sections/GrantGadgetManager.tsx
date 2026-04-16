@@ -423,9 +423,10 @@ function GadgetsList({ canCreate, canUpdate, canDelete }: { canCreate: boolean; 
 
   const filteredGadgets = gadgets.filter(gadget => {
     const child = children.find(c => c.Child_ID === gadget.Child_ID);
-    return 
-      child?.Child_Name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      gadget.Detail_of_Gadgets.toLowerCase().includes(searchQuery.toLowerCase());
+    return (
+      !!child?.Child_Name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      gadget.Detail_of_Gadgets.toLowerCase().includes(searchQuery.toLowerCase())
+    );
   });
 
   const handleSubmit = () => {

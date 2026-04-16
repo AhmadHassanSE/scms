@@ -336,7 +336,7 @@ export function ParentDetail({ pNo, onNavigate, onBack }: ParentDetailProps) {
                     <div 
                       key={child.Child_ID} 
                       className="p-4 border rounded-lg hover:bg-slate-50 cursor-pointer"
-                      onClick={() => onNavigate('child-detail', { childId: child.Child_ID })}
+                      onClick={() => onNavigate('child-detail', { childId: child.Child_ID, pNo })}
                     >
                       <div className="flex items-center justify-between">
                         <div>

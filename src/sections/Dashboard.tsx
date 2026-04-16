@@ -116,6 +116,11 @@ export function Dashboard({ onNavigate }: DashboardProps) {
               + Add Parent
             </Button>
           )}
+          {canCreate('children') && (
+            <Button variant="outline" onClick={() => onNavigate('child-new')}>
+              + Add Child
+            </Button>
+          )}
           <Button variant="outline" onClick={handleSeedData}>
             Load Sample Data
           </Button>

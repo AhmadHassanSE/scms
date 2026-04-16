@@ -11,6 +11,24 @@ app.use(express.json({ limit: '2mb' }));
 
 function sendError(res, error, fallbackMessage = 'Request failed') {
   console.error(error);
+  const sqlCode = error && typeof error === 'object' ? error.code : undefined;
+
+  if (sqlCode === 'ER_DUP_ENTRY') {
+    res.status(409).json({
+      message: 'Duplicate value violates a unique field',
+      error: error.sqlMessage || (error instanceof Error ? error.message : 'Duplicate entry')
+    });
+    return;
+  }
+
+  if (sqlCode === 'ER_NO_REFERENCED_ROW_2' || sqlCode === 'ER_ROW_IS_REFERENCED_2') {
+    res.status(400).json({
+      message: 'Request violates a relationship constraint',
+      error: error.sqlMessage || (error instanceof Error ? error.message : 'Constraint error')
+    });
+    return;
+  }
+
   res.status(500).json({ message: fallbackMessage, error: error instanceof Error ? error.message : 'Unknown error' });
 }
 
