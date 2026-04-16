@@ -8,7 +8,8 @@ import {
   LogOut, 
   Bell,
   Menu,
-  X,
+  ChevronLeft,
+  ChevronRight,
   Shield,
   User
 } from 'lucide-react';
@@ -65,9 +66,12 @@ function App() {
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
   const [pageParams, setPageParams] = useState<any>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [desktopSidebarPinned, setDesktopSidebarPinned] = useState(false);
+  const [desktopSidebarHovered, setDesktopSidebarHovered] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
   const [notifications, setNotifications] = useState<any[]>([]);
   const { user, logout, canRead } = useAuth();
+  const isDesktopSidebarVisible = desktopSidebarPinned || desktopSidebarHovered;
 
   useEffect(() => {
     setIsAuthenticated(!!db.getCurrentUser());
@@ -174,17 +178,31 @@ function App() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <div className="futuristic-shell min-h-screen flex text-foreground">
+      {/* Desktop hover trigger */}
+      <div
+        className="hidden lg:block fixed left-0 top-0 bottom-0 w-4 z-40"
+        onMouseEnter={() => setDesktopSidebarHovered(true)}
+      />
+
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-slate-200 fixed h-full">
-        <div className="p-6 border-b border-slate-200">
+      <aside
+        onMouseEnter={() => setDesktopSidebarHovered(true)}
+        onMouseLeave={() => {
+          if (!desktopSidebarPinned) setDesktopSidebarHovered(false);
+        }}
+        className={`hidden lg:flex flex-col w-64 bg-sidebar/95 text-sidebar-foreground border-r border-sidebar-border fixed h-full backdrop-blur-xl shadow-2xl shadow-blue-950/15 transition-transform duration-300 ease-out z-50 ${
+          isDesktopSidebarVisible ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        <div className="p-6 border-b border-sidebar-border/70">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-sky-400 to-blue-700 flex items-center justify-center shadow-lg shadow-blue-900/40">
               <Shield className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="font-bold text-slate-900 leading-tight">SCMS</h1>
-              <p className="text-xs text-slate-500">Welfare Division</p>
+              <h1 className="font-bold text-white leading-tight">SCMS</h1>
+              <p className="text-xs text-blue-100/85">Welfare Division</p>
             </div>
           </div>
         </div>
@@ -198,10 +216,10 @@ function App() {
               <button
                 key={item.id}
                 onClick={() => navigateTo(item.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-all duration-200
                   ${isActive 
-                    ? 'bg-primary/10 text-primary font-medium' 
-                    : 'text-slate-600 hover:bg-slate-100'
+                    ? 'bg-gradient-to-r from-sky-400/25 to-blue-500/20 text-white font-semibold shadow-sm shadow-blue-950/30' 
+                    : 'text-blue-100/85 hover:bg-white/10 hover:text-white'
                   }`}
               >
                 <Icon className="w-5 h-5" />
@@ -211,30 +229,48 @@ function App() {
           })}
         </nav>
 
-        <div className="p-4 border-t border-slate-200">
+        <div className="p-4 border-t border-sidebar-border/70">
           <div className="flex items-center gap-3 px-4 py-3">
-            <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center">
-              <User className="w-5 h-5 text-slate-600" />
+            <div className="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center">
+              <User className="w-5 h-5 text-white" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-medium text-sm truncate">{user?.Full_Name}</p>
-              <p className="text-xs text-slate-500">{user?.Role}</p>
+              <p className="font-medium text-sm truncate text-white">{user?.Full_Name}</p>
+              <p className="text-xs text-blue-100/80">{user?.Role}</p>
             </div>
           </div>
         </div>
       </aside>
 
+      {/* Desktop Sidebar Toggle */}
+      <Button
+        onClick={() => {
+          const next = !desktopSidebarPinned;
+          setDesktopSidebarPinned(next);
+          if (!next) {
+            setDesktopSidebarHovered(false);
+          } else {
+            setDesktopSidebarHovered(true);
+          }
+        }}
+        variant="default"
+        size="icon"
+        className="hidden lg:inline-flex fixed bottom-4 left-4 z-[60] rounded-full shadow-xl"
+      >
+        {isDesktopSidebarVisible ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+      </Button>
+
       {/* Mobile Sidebar */}
       <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-        <SheetContent side="left" className="w-64 p-0">
-          <div className="p-6 border-b border-slate-200">
+        <SheetContent side="left" className="w-64 p-0 bg-sidebar text-sidebar-foreground border-sidebar-border">
+          <div className="p-6 border-b border-sidebar-border/70">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
+              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-sky-400 to-blue-700 flex items-center justify-center shadow-lg shadow-blue-900/40">
                 <Shield className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h1 className="font-bold text-slate-900 leading-tight">SCMS</h1>
-                <p className="text-xs text-slate-500">Welfare Division</p>
+                <h1 className="font-bold text-white leading-tight">SCMS</h1>
+                <p className="text-xs text-blue-100/85">Welfare Division</p>
               </div>
             </div>
           </div>
@@ -248,10 +284,10 @@ function App() {
                 <button
                   key={item.id}
                   onClick={() => navigateTo(item.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-all duration-200
                     ${isActive 
-                      ? 'bg-primary/10 text-primary font-medium' 
-                      : 'text-slate-600 hover:bg-slate-100'
+                      ? 'bg-gradient-to-r from-sky-400/25 to-blue-500/20 text-white font-semibold shadow-sm shadow-blue-950/30' 
+                      : 'text-blue-100/85 hover:bg-white/10 hover:text-white'
                     }`}
                 >
                   <Icon className="w-5 h-5" />
@@ -264,9 +300,9 @@ function App() {
       </Sheet>
 
       {/* Main Content */}
-      <main className="flex-1 lg:ml-64">
+      <main className={`flex-1 transition-[margin] duration-300 ${desktopSidebarPinned ? 'lg:ml-64' : 'lg:ml-0'}`}>
         {/* Header */}
-        <header className="sticky top-0 z-30 bg-white border-b border-slate-200 px-4 sm:px-6 py-4">
+        <header className="sticky top-0 z-30 bg-white/85 backdrop-blur-xl border-b border-blue-200/70 px-4 sm:px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Sheet>
@@ -276,7 +312,7 @@ function App() {
                   </Button>
                 </SheetTrigger>
               </Sheet>
-              <h2 className="text-lg font-semibold text-slate-900">
+              <h2 className="text-lg font-semibold text-blue-950">
                 {filteredNav.find(n => n.id === currentPage || currentPage.startsWith(n.id + '-'))?.label || 'Dashboard'}
               </h2>
             </div>
@@ -344,7 +380,7 @@ function App() {
         </header>
 
         {/* Page Content */}
-        <div className="p-4 sm:p-6 max-w-7xl mx-auto">
+        <div className="section-reveal p-4 sm:p-6 max-w-7xl mx-auto">
           {renderPage()}
         </div>
       </main>
