@@ -1,13 +1,51 @@
 import express from 'express';
 import cors from 'cors';
 import 'dotenv/config';
+import path from 'path';
+import multer from 'multer';
+import crypto from 'crypto';
+import { fileURLToPath } from 'url';
+import fs from 'fs/promises';
 import { pool, query, transaction, ensureSchema } from './database.js';
 
 const app = express();
 const port = Number(process.env.PORT || 3001);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const uploadsRoot = path.join(__dirname, 'uploads');
+const parentDocUploadDir = path.join(uploadsRoot, 'parent-docs');
+
+await fs.mkdir(parentDocUploadDir, { recursive: true });
+
+const allowedImageMimeTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/tiff']);
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, callback) => {
+      callback(null, parentDocUploadDir);
+    },
+    filename: (_req, file, callback) => {
+      const ext = path.extname(file.originalname || '').toLowerCase();
+      const safeExt = ext || '.jpg';
+      const uniquePart = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}`;
+      callback(null, `${uniquePart}${safeExt}`);
+    }
+  }),
+  limits: {
+    fileSize: 8 * 1024 * 1024
+  },
+  fileFilter: (_req, file, callback) => {
+    if (!allowedImageMimeTypes.has(file.mimetype)) {
+      callback(new Error('Only image files are allowed (jpeg, png, webp, gif, tiff)'));
+      return;
+    }
+    callback(null, true);
+  }
+});
 
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: '2mb' }));
+app.use('/uploads', express.static(uploadsRoot));
 
 function sendError(res, error, fallbackMessage = 'Request failed') {
   console.error(error);
@@ -52,6 +90,11 @@ async function getParentRecord(pNo) {
 
 async function getDocumentRecord(docId) {
   const rows = await query('SELECT * FROM Document_Tracking WHERE Doc_ID = ?', [docId]);
+  return rows[0] || null;
+}
+
+async function getScannedDocumentRecord(documentFileId) {
+  const rows = await query('SELECT * FROM Parent_Document_Files WHERE Document_File_ID = ?', [documentFileId]);
   return rows[0] || null;
 }
 
@@ -147,6 +190,9 @@ app.put('/api/parents/:pNo', async (req, res) => {
 app.delete('/api/parents/:pNo', async (req, res) => {
   try {
     const pNo = req.params.pNo;
+
+    const scannedDocs = await query('SELECT Storage_Path FROM Parent_Document_Files WHERE P_No_O_No = ?', [pNo]);
+
     await transaction(async (connection) => {
       const [childRows] = await connection.query('SELECT Child_ID FROM Dependent_Children WHERE P_No_O_No = ?', [pNo]);
       const childIds = childRows.map((row) => row.Child_ID);
@@ -161,6 +207,13 @@ app.delete('/api/parents/:pNo', async (req, res) => {
       await connection.query('DELETE FROM Dependent_Children WHERE P_No_O_No = ?', [pNo]);
       await connection.query('DELETE FROM Parent_Beneficiary WHERE P_No_O_No = ?', [pNo]);
     });
+
+    for (const record of scannedDocs) {
+      const relativePath = String(record.Storage_Path || '').replace(/^\/uploads\//, '');
+      if (!relativePath) continue;
+      const filePath = path.join(uploadsRoot, relativePath);
+      await fs.unlink(filePath).catch(() => undefined);
+    }
 
     res.status(204).send();
   } catch (error) {
@@ -210,6 +263,98 @@ app.put('/api/documents/:docId', async (req, res) => {
 app.delete('/api/documents/:docId', async (req, res) => {
   try {
     await query('DELETE FROM Document_Tracking WHERE Doc_ID = ?', [Number(req.params.docId)]);
+    res.status(204).send();
+  } catch (error) {
+    sendError(res, error);
+  }
+});
+
+app.get('/api/parents/:pNo/scanned-documents', async (req, res) => {
+  try {
+    const pNo = req.params.pNo;
+    res.json(
+      await query(
+        `SELECT *
+         FROM Parent_Document_Files
+         WHERE P_No_O_No = ?
+         ORDER BY Uploaded_At DESC, Document_File_ID DESC`,
+        [pNo]
+      )
+    );
+  } catch (error) {
+    sendError(res, error);
+  }
+});
+
+app.post('/api/parents/:pNo/scanned-documents', (req, res) => {
+  upload.single('file')(req, res, async (uploadError) => {
+    if (uploadError) {
+      res.status(400).json({
+        message: 'Upload failed',
+        error: uploadError instanceof Error ? uploadError.message : 'Invalid upload request'
+      });
+      return;
+    }
+
+    try {
+      const pNo = req.params.pNo;
+      const parent = await getParentRecord(pNo);
+      if (!parent) {
+        res.status(404).json({ message: 'Parent not found' });
+        return;
+      }
+
+      if (!req.file) {
+        res.status(400).json({ message: 'No file received' });
+        return;
+      }
+
+      const docType = typeof req.body.docType === 'string' ? req.body.docType.trim() : '';
+      const storagePath = `/uploads/parent-docs/${req.file.filename}`;
+
+      const result = await query(
+        `INSERT INTO Parent_Document_Files
+          (P_No_O_No, Doc_Type, Original_File_Name, Stored_File_Name, Mime_Type, File_Size_Bytes, Storage_Path)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          pNo,
+          docType || null,
+          req.file.originalname,
+          req.file.filename,
+          req.file.mimetype,
+          req.file.size,
+          storagePath
+        ]
+      );
+
+      res.status(201).json(await getScannedDocumentRecord(result.insertId));
+    } catch (error) {
+      if (req.file?.path) {
+        await fs.unlink(req.file.path).catch(() => undefined);
+      }
+      sendError(res, error);
+    }
+  });
+});
+
+app.delete('/api/scanned-documents/:documentFileId', async (req, res) => {
+  try {
+    const documentFileId = Number(req.params.documentFileId);
+    const existing = await getScannedDocumentRecord(documentFileId);
+
+    if (!existing) {
+      res.status(404).json({ message: 'Document file not found' });
+      return;
+    }
+
+    await query('DELETE FROM Parent_Document_Files WHERE Document_File_ID = ?', [documentFileId]);
+
+    const relativePath = String(existing.Storage_Path || '').replace(/^\/uploads\//, '');
+    if (relativePath) {
+      const filePath = path.join(uploadsRoot, relativePath);
+      await fs.unlink(filePath).catch(() => undefined);
+    }
+
     res.status(204).send();
   } catch (error) {
     sendError(res, error);

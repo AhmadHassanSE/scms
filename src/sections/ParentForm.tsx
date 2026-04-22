@@ -6,10 +6,11 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Save, User, Building2, FileText, CreditCard } from 'lucide-react';
-import { useParents, useDocuments, useBanking } from '@/hooks/useDatabase';
-import { validateCNIC, validateIBAN, validatePhone, getCNICError, getIBANError, getPhoneError, getPNoError } from '@/lib/validation';
-import type { ParentBeneficiary, ServiceStatus } from '@/types';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ArrowLeft, Save, User, FileText, CreditCard, Upload, Image, Trash2 } from 'lucide-react';
+import { useParents, useDocuments, useBanking, useScannedDocuments } from '@/hooks/useDatabase';
+import { getCNICError, getIBANError, getPhoneError, getPNoError } from '@/lib/validation';
+import type { ServiceStatus } from '@/types';
 
 interface ParentFormProps {
   pNo?: string | null;
@@ -21,8 +22,16 @@ export function ParentForm({ pNo, onSave, onCancel }: ParentFormProps) {
   const { parents, create, update } = useParents();
   const { documents, create: createDoc, update: updateDoc } = useDocuments();
   const { banking, create: createBank, update: updateBank } = useBanking();
-  
   const isEditing = !!pNo;
+  const {
+    documents: scannedDocuments,
+    loading: scannedDocsLoading,
+    error: scannedDocsError,
+    upload: uploadScannedDocument,
+    remove: removeScannedDocument,
+    getFileUrl
+  } = useScannedDocuments(isEditing ? pNo || null : null);
+
   const existingParent = isEditing ? parents.find(p => p.P_No_O_No === pNo) : null;
   const existingDoc = isEditing ? documents.find(d => d.P_No_O_No === pNo) : null;
   const existingBank = isEditing ? banking.find(b => b.P_No_O_No === pNo) : null;
@@ -55,6 +64,11 @@ export function ParentForm({ pNo, onSave, onCancel }: ParentFormProps) {
     IBAN: '',
     Bank_Name_Branch: ''
   });
+  const [selectedScanFile, setSelectedScanFile] = useState<File | null>(null);
+  const [scanDocType, setScanDocType] = useState('');
+  const [scanActionError, setScanActionError] = useState<string | null>(null);
+  const [isUploadingScan, setIsUploadingScan] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState<{ name: string; url: string } | null>(null);
 
   useEffect(() => {
     if (existingParent) {
@@ -140,7 +154,7 @@ export function ParentForm({ pNo, onSave, onCancel }: ParentFormProps) {
         createBank({ ...bankData, P_No_O_No: pNo! });
       }
     } else {
-      const newParent = create(parentData);
+      create(parentData);
       if (docData.Letter_Reference) {
         createDoc({ ...docData, P_No_O_No: parentData.P_No_O_No });
       }
@@ -150,6 +164,43 @@ export function ParentForm({ pNo, onSave, onCancel }: ParentFormProps) {
     }
 
     onSave();
+  };
+
+  const handleScannedDocumentUpload = async () => {
+    if (!selectedScanFile || !pNo) {
+      return;
+    }
+
+    setIsUploadingScan(true);
+    setScanActionError(null);
+
+    try {
+      await uploadScannedDocument(selectedScanFile, scanDocType.trim() || undefined);
+      setSelectedScanFile(null);
+      setScanDocType('');
+    } catch (uploadError) {
+      setScanActionError(uploadError instanceof Error ? uploadError.message : 'Failed to upload scanned document');
+    } finally {
+      setIsUploadingScan(false);
+    }
+  };
+
+  const handleScannedDocumentDelete = async (documentFileId: number) => {
+    setScanActionError(null);
+    try {
+      await removeScannedDocument(documentFileId);
+    } catch (deleteError) {
+      setScanActionError(deleteError instanceof Error ? deleteError.message : 'Failed to delete scanned document');
+    }
+  };
+
+  const formatBytes = (bytes: number): string => {
+    if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+    if (bytes < 1024) return `${bytes} B`;
+    const kb = bytes / 1024;
+    if (kb < 1024) return `${kb.toFixed(1)} KB`;
+    const mb = kb / 1024;
+    return `${mb.toFixed(1)} MB`;
   };
 
   return (
@@ -279,6 +330,103 @@ export function ParentForm({ pNo, onSave, onCancel }: ParentFormProps) {
                   <p className="text-xs text-slate-500">Format: 00000-0000000-0</p>
                 </div>
               </div>
+
+              <div className="border rounded-lg p-4 space-y-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900">Scanned Document Images</h3>
+                  <p className="text-xs text-slate-500">Upload scanned image files linked to this parent profile.</p>
+                </div>
+
+                {!isEditing ? (
+                  <Alert>
+                    <AlertDescription>
+                      Save this parent first, then you can upload scanned document images.
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="space-y-2 md:col-span-1">
+                        <Label htmlFor="scanDocType">Document Type</Label>
+                        <Input
+                          id="scanDocType"
+                          value={scanDocType}
+                          onChange={(e) => setScanDocType(e.target.value)}
+                          placeholder="e.g., Disability Certificate"
+                        />
+                      </div>
+
+                      <div className="space-y-2 md:col-span-1">
+                        <Label htmlFor="scanFile">Scanned Image</Label>
+                        <Input
+                          id="scanFile"
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => setSelectedScanFile(e.target.files?.[0] || null)}
+                        />
+                      </div>
+
+                      <div className="flex items-end">
+                        <Button
+                          type="button"
+                          onClick={() => void handleScannedDocumentUpload()}
+                          disabled={!selectedScanFile || isUploadingScan}
+                          className="w-full"
+                        >
+                          <Upload className="w-4 h-4 mr-2" />
+                          {isUploadingScan ? 'Uploading...' : 'Upload Image'}
+                        </Button>
+                      </div>
+                    </div>
+
+                    {(scanActionError || scannedDocsError) && (
+                      <Alert variant="destructive">
+                        <AlertDescription>{scanActionError || scannedDocsError}</AlertDescription>
+                      </Alert>
+                    )}
+
+                    <div className="space-y-3">
+                      {scannedDocsLoading ? (
+                        <p className="text-sm text-slate-500">Loading scanned documents...</p>
+                      ) : scannedDocuments.length === 0 ? (
+                        <p className="text-sm text-slate-500">No scanned images uploaded yet.</p>
+                      ) : (
+                        scannedDocuments.map((doc) => (
+                          <div
+                            key={doc.Document_File_ID}
+                            className="flex items-center justify-between gap-3 rounded-md border p-3"
+                          >
+                            <div className="min-w-0 flex items-center gap-3">
+                              <Image className="w-4 h-4 text-slate-500" />
+                              <div className="min-w-0">
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewDoc({ name: doc.Original_File_Name, url: getFileUrl(doc.Storage_Path) })}
+                                  className="font-medium text-slate-900 hover:underline truncate block text-left"
+                                >
+                                  {doc.Original_File_Name}
+                                </button>
+                                <p className="text-xs text-slate-500">
+                                  {doc.Doc_Type || 'General'} • {formatBytes(doc.File_Size_Bytes)}
+                                </p>
+                              </div>
+                            </div>
+
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => void handleScannedDocumentDelete(doc.Document_File_ID)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -372,6 +520,28 @@ export function ParentForm({ pNo, onSave, onCancel }: ParentFormProps) {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={!!previewDoc} onOpenChange={(open) => { if (!open) setPreviewDoc(null); }}>
+        <DialogContent className="max-w-5xl p-4">
+          <DialogHeader>
+            <DialogTitle>{previewDoc?.name || 'Document Preview'}</DialogTitle>
+          </DialogHeader>
+          <div className="w-full rounded-md border bg-slate-50 p-2">
+            {previewDoc && (
+              <img
+                src={previewDoc.url}
+                alt={previewDoc.name}
+                className="max-h-[72vh] w-full object-contain"
+              />
+            )}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setPreviewDoc(null)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -28,6 +28,18 @@ export interface DocumentTracking {
   File_No: string;
 }
 
+export interface ScannedDocumentFile {
+  Document_File_ID: number;
+  P_No_O_No: string;
+  Doc_Type?: string;
+  Original_File_Name: string;
+  Stored_File_Name: string;
+  Mime_Type: string;
+  File_Size_Bytes: number;
+  Storage_Path: string;
+  Uploaded_At: string;
+}
+
 // Banking Layer
 export interface BankingDetails {
   Account_ID: number;
@@ -99,6 +111,7 @@ export interface AuditLog {
 // Composite Types for UI
 export interface ParentWithDetails extends ParentBeneficiary {
   documents?: DocumentTracking;
+  scannedDocuments?: ScannedDocumentFile[];
   banking?: BankingDetails;
   children?: ChildWithDetails[];
 }

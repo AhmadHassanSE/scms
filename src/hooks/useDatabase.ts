@@ -6,6 +6,7 @@ import type {
   MonthlyGrants, 
   ChildGadgets,
   DocumentTracking,
+  ScannedDocumentFile,
   BankingDetails,
   DashboardKPIs,
   SearchResult,
@@ -14,8 +15,10 @@ import type {
   GrantWithChild,
   AuditLog,
   User,
-  DisabilityCategory
 } from '@/types';
+
+type ViteImportMeta = ImportMeta & { env?: Record<string, string | undefined> };
+const API_BASE_URL = (import.meta as ViteImportMeta).env?.VITE_API_URL || 'http://localhost:3001/api';
 
 function useDbRefresh(refresh: () => void) {
   useEffect(() => {
@@ -258,6 +261,92 @@ export function useDocuments() {
   }, [refresh]);
 
   return { documents, create, update, refresh };
+}
+
+export function useScannedDocuments(pNo: string | null) {
+  const [documents, setDocuments] = useState<ScannedDocumentFile[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!pNo) {
+      setDocuments([]);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/parents/${encodeURIComponent(pNo)}/scanned-documents`);
+      if (!response.ok) {
+        throw new Error('Unable to load scanned documents');
+      }
+
+      const payload = (await response.json()) as ScannedDocumentFile[];
+      setDocuments(payload);
+    } catch (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : 'Unable to load scanned documents');
+    } finally {
+      setLoading(false);
+    }
+  }, [pNo]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const upload = useCallback(async (file: File, docType?: string) => {
+    if (!pNo) {
+      throw new Error('Parent is required before uploading documents');
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    if (docType) {
+      formData.append('docType', docType);
+    }
+
+    const response = await fetch(`${API_BASE_URL}/parents/${encodeURIComponent(pNo)}/scanned-documents`, {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!response.ok) {
+      const message = await response.text();
+      throw new Error(message || 'Upload failed');
+    }
+
+    await refresh();
+  }, [pNo, refresh]);
+
+  const remove = useCallback(async (documentFileId: number) => {
+    const response = await fetch(`${API_BASE_URL}/scanned-documents/${documentFileId}`, {
+      method: 'DELETE'
+    });
+
+    if (!response.ok) {
+      const message = await response.text();
+      throw new Error(message || 'Delete failed');
+    }
+
+    await refresh();
+  }, [refresh]);
+
+  const getFileUrl = useCallback((storagePath: string): string => {
+    const uploadsBase = API_BASE_URL.replace(/\/api\/?$/, '');
+    return `${uploadsBase}${storagePath}`;
+  }, []);
+
+  return {
+    documents,
+    loading,
+    error,
+    refresh,
+    upload,
+    remove,
+    getFileUrl
+  };
 }
 
 // Banking

@@ -54,6 +54,25 @@ export async function ensureSchema() {
   const connection = await pool.getConnection();
 
   try {
+    await connection.query(
+      `CREATE TABLE IF NOT EXISTS Parent_Document_Files (
+        Document_File_ID INT AUTO_INCREMENT PRIMARY KEY,
+        P_No_O_No VARCHAR(50) NOT NULL,
+        Doc_Type VARCHAR(120) NULL,
+        Original_File_Name VARCHAR(255) NOT NULL,
+        Stored_File_Name VARCHAR(255) NOT NULL,
+        Mime_Type VARCHAR(120) NOT NULL,
+        File_Size_Bytes INT NOT NULL,
+        Storage_Path VARCHAR(500) NOT NULL,
+        Uploaded_At TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_parent_document_files_parent (P_No_O_No),
+        CONSTRAINT fk_parent_document_files_parent
+          FOREIGN KEY (P_No_O_No)
+          REFERENCES Parent_Beneficiary(P_No_O_No)
+          ON DELETE CASCADE
+      )`
+    );
+
     await addColumnIfMissing(connection, 'Parent_Beneficiary', 'No_of_Disabled_Children', 'INT DEFAULT 0');
     await addColumnIfMissing(connection, 'Document_Tracking', 'Total_No_of_Children', 'INT NULL');
     await addColumnIfMissing(connection, 'Banking_Details', 'CNIC_of_Account_Holder', 'VARCHAR(20) NULL');

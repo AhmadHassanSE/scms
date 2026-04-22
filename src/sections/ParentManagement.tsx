@@ -17,7 +17,6 @@ import {
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
-  DialogTrigger,
   DialogFooter,
   DialogDescription
 } from '@/components/ui/dialog';
@@ -35,13 +34,13 @@ import {
   Trash2, 
   Eye, 
   FileText,
+  Image,
   Building2,
   User,
   Shield,
-  Briefcase,
   ArrowRight
 } from 'lucide-react';
-import { useParents, useParentWithDetails } from '@/hooks/useDatabase';
+import { useParents, useParentWithDetails, useScannedDocuments } from '@/hooks/useDatabase';
 import { useAuth } from '@/hooks/useAuth';
 import { formatChildDisplayName } from '@/lib/utils';
 import type { ParentBeneficiary, ServiceStatus } from '@/types';
@@ -234,7 +233,9 @@ interface ParentDetailProps {
 export function ParentDetail({ pNo, onNavigate, onBack }: ParentDetailProps) {
   const { canUpdate } = useAuth();
   const { parent } = useParentWithDetails(pNo);
+  const { documents: scannedDocuments, loading: scannedDocsLoading, getFileUrl } = useScannedDocuments(pNo);
   const [activeTab, setActiveTab] = useState('profile');
+  const [previewDoc, setPreviewDoc] = useState<{ name: string; url: string } | null>(null);
 
   if (!parent) {
     return (
@@ -420,32 +421,90 @@ export function ParentDetail({ pNo, onNavigate, onBack }: ParentDetailProps) {
               )}
             </CardHeader>
             <CardContent>
-              {parent.documents ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="text-sm font-medium text-slate-500">Letter Reference</label>
-                    <p className="text-lg">{parent.documents.Letter_Reference}</p>
+              <div className="space-y-6">
+                {parent.documents ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="text-sm font-medium text-slate-500">Letter Reference</label>
+                      <p className="text-lg">{parent.documents.Letter_Reference}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-500">Contact Number</label>
+                      <p className="text-lg">{parent.documents.Contact_No}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-500">Almirah Number</label>
+                      <p className="text-lg">{parent.documents.Almirah_No}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-500">File Number</label>
+                      <p className="text-lg">{parent.documents.File_No}</p>
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-sm font-medium text-slate-500">Contact Number</label>
-                    <p className="text-lg">{parent.documents.Contact_No}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-slate-500">Almirah Number</label>
-                    <p className="text-lg">{parent.documents.Almirah_No}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-slate-500">File Number</label>
-                    <p className="text-lg">{parent.documents.File_No}</p>
-                  </div>
+                ) : (
+                  <p className="text-center py-8 text-slate-500">No document tracking available</p>
+                )}
+
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-slate-900">Scanned Document Images</h3>
+
+                  {scannedDocsLoading ? (
+                    <p className="text-sm text-slate-500">Loading scanned images...</p>
+                  ) : scannedDocuments.length === 0 ? (
+                    <p className="text-sm text-slate-500">No scanned images uploaded yet.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {scannedDocuments.map((doc) => (
+                        <button
+                          key={doc.Document_File_ID}
+                          type="button"
+                          onClick={() => setPreviewDoc({ name: doc.Original_File_Name, url: getFileUrl(doc.Storage_Path) })}
+                          className="rounded-md border p-3 hover:bg-slate-50 transition-colors text-left"
+                        >
+                          <div className="aspect-video w-full rounded-md bg-slate-100 overflow-hidden mb-2">
+                            <img
+                              src={getFileUrl(doc.Storage_Path)}
+                              alt={doc.Original_File_Name}
+                              className="w-full h-full object-cover"
+                              loading="lazy"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2 text-sm text-slate-700">
+                            <Image className="w-4 h-4" />
+                            <span className="truncate">{doc.Doc_Type || doc.Original_File_Name}</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <p className="text-center py-8 text-slate-500">No document tracking available</p>
-              )}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={!!previewDoc} onOpenChange={(open) => { if (!open) setPreviewDoc(null); }}>
+        <DialogContent className="max-w-5xl p-4">
+          <DialogHeader>
+            <DialogTitle>{previewDoc?.name || 'Document Preview'}</DialogTitle>
+          </DialogHeader>
+          <div className="w-full rounded-md border bg-slate-50 p-2">
+            {previewDoc && (
+              <img
+                src={previewDoc.url}
+                alt={previewDoc.name}
+                className="max-h-[72vh] w-full object-contain"
+              />
+            )}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setPreviewDoc(null)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
